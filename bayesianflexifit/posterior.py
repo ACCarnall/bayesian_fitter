@@ -1,11 +1,7 @@
-from __future__ import print_function, division, absolute_import
-
 import numpy as np
 
 import os
 import deepdish as dd
-
-from copy import deepcopy
 
 
 class posterior(object):
@@ -29,7 +25,7 @@ class posterior(object):
         self.run = run
         self.n_samples = n_samples
 
-        fname = "bayesian_fitter/posterior/" + self.run + "/" + self.ID + ".h5"
+        fname = "bff/" + self.run + "/" + self.ID + ".h5"
 
         # Check to see whether the object has been fitted.
         if not os.path.exists(fname):

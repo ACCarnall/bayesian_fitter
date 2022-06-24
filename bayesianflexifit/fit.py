@@ -3,14 +3,9 @@ import os
 import time
 import warnings
 import deepdish as dd
+import pymultinest as pmn
 
 from copy import deepcopy
-
-try:
-    import pymultinest as pmn
-
-except (ImportError, RuntimeError, SystemExit) as e:
-    print("PyMultiNest import failed, fitting will be unavailable.")
 
 # detect if run through mpiexec/mpirun
 try:
@@ -28,24 +23,15 @@ def make_dirs(run="."):
 
     working_dir = os.getcwd()
 
-    if not os.path.exists(working_dir + "/bayesian_fitter"):
-        os.mkdir(working_dir + "/bayesian_fitter")
-
-    if not os.path.exists(working_dir + "/bayesian_fitter/plots"):
-        os.mkdir(working_dir + "/bayesian_fitter/plots")
-
-    if not os.path.exists(working_dir + "/bayesian_fitter/posterior"):
-        os.mkdir(working_dir + "/bayesian_fitter/posterior")
-
-    if not os.path.exists(working_dir + "/bayesian_fitter/cats"):
-        os.mkdir(working_dir + "/bayesian_fitter/cats")
+    if not os.path.exists(working_dir + "/bff"):
+        os.mkdir(working_dir + "/bff")
 
     if run != ".":
-        if not os.path.exists("bayesian_fitter/posterior/" + run):
-            os.mkdir("bayesian_fitter/posterior/" + run)
+        if not os.path.exists("bff/" + run):
+            os.mkdir("bff/" + run)
 
-        if not os.path.exists("bayesian_fitter/plots/" + run):
-            os.mkdir("bayesian_fitter/plots/" + run)
+        if not os.path.exists("bff/plots/" + run):
+            os.mkdir("bff/plots/" + run)
 
 
 class fit(object):
@@ -70,7 +56,7 @@ class fit(object):
             make_dirs(run=run)
 
         # The base name for output files.
-        self.fname = "bayesian_fitter/posterior/" + run + "/" + self.ID + "_"
+        self.fname = "bff/" + run + "/" + self.ID + "_"
 
         # A dictionary containing properties of the model to be saved.
         self.results = {"fit_instructions": self.fit_instructions}
@@ -280,7 +266,7 @@ class fit(object):
 
     def _get_posterior(self):
 
-        fname = "bayesian_fitter/posterior/" + self.run + "/" + self.ID + ".h5"
+        fname = "bff/" + self.run + "/" + self.ID + ".h5"
 
         # Check to see whether the object has been fitted.
         if not os.path.exists(fname):

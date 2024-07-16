@@ -2,8 +2,9 @@ import numpy as np
 import os
 import time
 import warnings
-import deepdish as dd
+import h5py
 import pymultinest as pmn
+#from nautilus import Sampler
 
 from copy import deepcopy
 
@@ -59,7 +60,7 @@ class fit(object):
         self.fname = "bff/" + run + "/" + self.ID + "_"
 
         # A dictionary containing properties of the model to be saved.
-        self.results = {"fit_instructions": self.fit_instructions}
+        self.results = {}
 
         if self.time_calls:
             self.times = np.zeros(1000)
@@ -67,10 +68,12 @@ class fit(object):
 
         # If a posterior file already exists load it.
         if os.path.exists(self.fname[:-1] + ".h5"):
-            self.results = dd.io.load(self.fname[:-1] + ".h5")
+            file = h5py.File(self.fname[:-1] + ".h5", "r")
             self._get_posterior()
-            self.fit_instructions = dd.io.load(self.fname[:-1] + ".h5",
-                                               group="/fit_instructions")
+            fit_info_str = file.attrs["fit_instructions"]
+            fit_info_str = fit_info_str.replace("array", "np.array")
+            fit_info_str = fit_info_str.replace("float", "np.float")
+            self.fit_instructions = eval(fit_info_str)
 
             if rank == 0:
                 print("\nResults loaded from " + self.fname[:-1] + ".h5\n")
@@ -110,6 +113,16 @@ class fit(object):
                     importance_nested_sampling=False, verbose=verbose,
                     sampling_efficiency="model",
                     outputfiles_basename=self.fname, use_MPI=use_MPI)
+            """
+            n_sampler = Sampler(self.prior.transform,
+                                self._lnlike, n_live=n_live,
+                                n_networks=4, pool=pool,
+                                n_dim=self.ndim,
+                                filepath=self.fname)
+
+            n_sampler.run(verbose=verbose, n_eff=n_eff,
+                            discard_exploration=discard_exploration)
+            """
 
         if rank == 0 or not use_MPI:
             runtime = time.time() - start_time
@@ -129,9 +142,19 @@ class fit(object):
                                                      (16, 84), axis=0)
 
             # Save re-formatted outputs as HDF5 and remove MultiNest output.
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                dd.io.save(self.fname[:-1] + ".h5", self.results)
+            file = h5py.File(self.fname[:-1] + ".h5", "w")
+
+            # This is necessary for converting large arrays to strings
+            np.set_printoptions(threshold=10**7)
+            file.attrs["fit_instructions"] = str(self.fit_instructions)
+            np.set_printoptions(threshold=10**4)
+
+            for k in self.results.keys():
+                file.create_dataset(k, data=self.results[k])
+
+            self.results["fit_instructions"] = self.fit_instructions
+
+            file.close()
 
             os.system("rm " + self.fname + "*")
 
@@ -257,7 +280,7 @@ class fit(object):
             print("Lnlike was nan, replaced with zero probability.")
             return -9.99*10**99
 
-        if self.n_calls == 1000:
+        if self.time_calls and self.n_calls == 1000:
             self.n_calls = 0
             print("Mean likelihood call time:", np.round(np.mean(self.times), 4))
             print("Wall time per lnlike call:", np.round((time.time() - self.wall_time0)/1000., 4))
@@ -266,17 +289,15 @@ class fit(object):
 
     def _get_posterior(self):
 
-        fname = "bff/" + self.run + "/" + self.ID + ".h5"
-
         # Check to see whether the object has been fitted.
-        if not os.path.exists(fname):
+        if not os.path.exists(self.fname[:-1] + ".h5"):
             raise IOError("Fit results not found for " + self.ID + ".")
 
         # Reconstruct the fitted model.
-        self.fit_instructions = dd.io.load(fname, group="/fit_instructions")
+        file = h5py.File(self.fname[:-1] + ".h5", "r")
 
         # 2D array of samples for the fitted parameters only.
-        self.samples2d = dd.io.load(fname, group="/samples2d")
+        self.samples2d = np.array(file["samples2d"])
 
         # If fewer than n_posterior exist in posterior, reduce n_posterior
         if self.samples2d.shape[0] < self.n_posterior:
@@ -293,3 +314,8 @@ class fit(object):
             param_name = self.params[i]
 
             self.posterior[param_name] = self.samples2d[self.indices, i]
+
+        for k in file.keys():
+            self.results[k] = np.array(file[k])
+            if np.sum(self.results[k].shape) == 1:
+                self.results[k] = self.results[k][0]
